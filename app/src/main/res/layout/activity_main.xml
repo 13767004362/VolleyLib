@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<android.support.constraint.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context="com.xingen.volleylibtest.MainActivity">
+
+
+    <ImageView
+        android:id="@+id/net_iv"
+        android:layout_width="100dp"
+        android:layout_height="100dp" />
+
+    <Button
+        android:id="@+id/net_download_file"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="下载文件"
+        app:layout_constraintTop_toBottomOf="@+id/net_iv" />
+
+    <Button
+        android:id="@+id/net_upload_file"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="上传文件"
+        app:layout_constraintTop_toBottomOf="@+id/net_download_file" />
+
+    <Button
+        android:id="@+id/net_form_text"
+        android:layout_width="wrap_content"
+        app:layout_constraintTop_toBottomOf="@+id/net_upload_file"
+        android:text="Form 表单请求"
+        android:layout_height="wrap_content" />
+    <Button
+        android:id="@+id/net_json_text"
+        android:layout_width="wrap_content"
+        app:layout_constraintTop_toBottomOf="@+id/net_form_text"
+        android:text="Gson 请求"
+        android:layout_height="wrap_content" />
+
+</android.support.constraint.ConstraintLayout>
