@@ -18,6 +18,7 @@
 
 -  **SingleFileRequest**：文件上传的Request , 不走内存操作，直接将文件写入。
 
+PS: 这里，对Volley源码已经中文注释。
 
 ---
 
