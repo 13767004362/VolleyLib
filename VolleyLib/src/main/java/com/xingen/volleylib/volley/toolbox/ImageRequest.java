@@ -29,19 +29,23 @@ import com.xingen.volleylib.volley.VolleyLog;
 
 
 /**
- * A canned request for getting an image at a given URL and calling
- * back with a decoded Bitmap.
  *
  * 用途：一个根据Url获取图片的请求，且回调一个bitmap
  */
 public class ImageRequest extends Request<Bitmap> {
-    /** Socket timeout in milliseconds for image requests   执行图片请求的Socket时间 */
+    /**
+     * 执行图片请求的连接时间
+     * */
     private static final int IMAGE_TIMEOUT_MS = 1000;
 
-    /** Default number of retries for image requests   默认图片请求的重试次数，这里2次 */
+    /**
+     *  默认图片请求的重试次数，这里2次
+     * */
     private static final int IMAGE_MAX_RETRIES = 2;
 
-    /** Default backoff multiplier for image requests   */
+    /**
+     *  图像请求的默认退避倍数
+     *  */
     private static final float IMAGE_BACKOFF_MULT = 2f;
 
     private final Response.Listener<Bitmap> mListener;
@@ -49,31 +53,24 @@ public class ImageRequest extends Request<Bitmap> {
     private final int mMaxWidth;
     private final int mMaxHeight;
 
-    /** Decoding lock so that we don't decode more than one image at a time (to avoid OOM's) */
+    /**
+     *  一个同步锁，避免在同一时刻解码太多Bitmap，导致内存溢出
+     * */
     private static final Object sDecodeLock = new Object();
 
     /**
-     * Creates a new image request, decoding to a maximum specified width and
-     * height. If both width and height are zero, the image will be decoded to
-     * its natural size. If one of the two is nonzero, that dimension will be
-     * clamped and the other one will be set to preserve the image's aspect
-     * ratio. If both width and height are nonzero, the image will be decoded to
-     * be fit in the rectangle of dimensions width x height while keeping its
-     * aspect ratio.
      *
      * @param url URL of the image
      * @param listener Listener to receive the decoded bitmap
      * @param maxWidth Maximum width to decode this bitmap to, or zero for none
-     * @param maxHeight Maximum height to decode this bitmap to, or zero for
-     *            none
+     * @param maxHeight Maximum height to decode this bitmap to, or zero for none
      * @param decodeConfig Format to decode the bitmap to
      * @param errorListener Error listener, or null to ignore errors
      */
     public ImageRequest(String url, Response.Listener<Bitmap> listener, int maxWidth, int maxHeight,
                         Config decodeConfig, Response.ErrorListener errorListener) {
         super(Method.GET, url, errorListener);
-        setRetryPolicy(
-                new DefaultRetryPolicy(IMAGE_TIMEOUT_MS, IMAGE_MAX_RETRIES, IMAGE_BACKOFF_MULT));
+        setRetryPolicy(new DefaultRetryPolicy(IMAGE_TIMEOUT_MS, IMAGE_MAX_RETRIES, IMAGE_BACKOFF_MULT));
         mListener = listener;
         mDecodeConfig = decodeConfig;
         mMaxWidth = maxWidth;
@@ -86,33 +83,34 @@ public class ImageRequest extends Request<Bitmap> {
     }
 
     /**
-     * Scales one side of a rectangle to fit aspect ratio.
+     * 压缩矩形的一边长度,计算合适的宽高比.
      *
-     * @param maxPrimary Maximum size of the primary dimension (i.e. width for
-     *        max width), or zero to maintain aspect ratio with secondary
-     *        dimension
-     * @param maxSecondary Maximum size of the secondary dimension, or zero to
-     *        maintain aspect ratio with primary dimension
-     * @param actualPrimary Actual size of the primary dimension
-     * @param actualSecondary Actual size of the secondary dimension
+     * @param maxPrimary 最大的主要尺寸
+     * @param maxSecondary 最大的辅助尺寸
+     * @param actualPrimary 实际主要尺寸
+     * @param actualSecondary 实际辅助尺寸
      */
     private static int getResizedDimension(int maxPrimary, int maxSecondary, int actualPrimary,
             int actualSecondary) {
-        // If no dominant value at all, just return the actual.
+        // 当最大主要尺寸和最大的辅助尺寸同时为0，无法计算，直接返回实际主要尺寸。
         if (maxPrimary == 0 && maxSecondary == 0) {
             return actualPrimary;
         }
-
-        // If primary is unspecified, scale primary to match secondary's scaling ratio.
+        // 当最大的主要尺寸为0，合适的尺寸=(最大的辅助尺寸/实际辅助尺寸）* 实际主要尺寸
         if (maxPrimary == 0) {
             double ratio = (double) maxSecondary / (double) actualSecondary;
             return (int) (actualPrimary * ratio);
         }
-
+         //当最大的主要尺寸不为0，最大辅助尺寸为0时，合适的尺寸=最大的主要尺寸。
         if (maxSecondary == 0) {
             return maxPrimary;
         }
-
+        /**
+         *
+         *  1. 先计算出一个比率=实际最大尺寸/实际辅助尺寸。
+         *  2  合适尺寸=比率*最大的主要尺寸
+         *  3.若是合适尺寸>最大的辅助尺寸，则合适尺寸=最大的辅助尺寸/比率。
+         */
         double ratio = (double) actualSecondary / (double) actualPrimary;
         int resized = maxPrimary;
         if (resized * ratio > maxSecondary) {
@@ -123,7 +121,7 @@ public class ImageRequest extends Request<Bitmap> {
 
     @Override
     protected Response<Bitmap> parseNetworkResponse(NetworkResponse response) {
-        // Serialize all decode on a global lock to reduce concurrent heap usage.
+        // 多线程的同步锁： 某一个时刻，只有一个Bitmap在解析，避免内存溢出。
         synchronized (sDecodeLock) {
             try {
                 return doParse(response);
@@ -135,48 +133,50 @@ public class ImageRequest extends Request<Bitmap> {
     }
 
     /**
-     * The real guts of parseNetworkResponse. Broken out for readability.
+     * 解析Byte数组生成Bitmap
+     * @param response
+     * @return
      */
     private Response<Bitmap> doParse(NetworkResponse response) {
         byte[] data = response.data;
         BitmapFactory.Options decodeOptions = new BitmapFactory.Options();
         Bitmap bitmap = null;
+        /**
+         *  若是没有指定宽度，同时也没指定高度，则直接加载原始图片的大小，生成Bitmap。
+         */
         if (mMaxWidth == 0 && mMaxHeight == 0) {
             decodeOptions.inPreferredConfig = mDecodeConfig;
             bitmap = BitmapFactory.decodeByteArray(data, 0, data.length, decodeOptions);
         } else {
-            // If we have to resize this image, first get the natural bounds.
+            /**
+             *  调整图片的大小，先获取到图片的Bounds范围
+             */
             decodeOptions.inJustDecodeBounds = true;
             BitmapFactory.decodeByteArray(data, 0, data.length, decodeOptions);
+            //获取到图片的真实长度。
             int actualWidth = decodeOptions.outWidth;
             int actualHeight = decodeOptions.outHeight;
+            //根据真实的宽高和指定宽高，计算处合适的宽高
+            int desiredWidth = getResizedDimension(mMaxWidth, mMaxHeight, actualWidth, actualHeight);
+            int desiredHeight = getResizedDimension(mMaxHeight, mMaxWidth, actualHeight, actualWidth);
 
-            // Then compute the dimensions we would ideally like to decode to.
-            int desiredWidth = getResizedDimension(mMaxWidth, mMaxHeight,
-                    actualWidth, actualHeight);
-            int desiredHeight = getResizedDimension(mMaxHeight, mMaxWidth,
-                    actualHeight, actualWidth);
-
-            // Decode to the nearest power of two scaling factor.
+            // 设置真正解码Bitmap.
             decodeOptions.inJustDecodeBounds = false;
-            // TODO(ficus): Do we need this or is it okay since API 8 doesn't support it?
+            // 这里注释，要这个还是没关系，因为API 8不支持它？
             // decodeOptions.inPreferQualityOverSpeed = PREFER_QUALITY_OVER_SPEED;
-            decodeOptions.inSampleSize =
-                findBestSampleSize(actualWidth, actualHeight, desiredWidth, desiredHeight);
-            Bitmap tempBitmap =
-                BitmapFactory.decodeByteArray(data, 0, data.length, decodeOptions);
+            // 通过合适的宽高，计算出压缩比例。
+            decodeOptions.inSampleSize = findBestSampleSize(actualWidth, actualHeight, desiredWidth, desiredHeight);
+            Bitmap tempBitmap = BitmapFactory.decodeByteArray(data, 0, data.length, decodeOptions);
 
-            // If necessary, scale down to the maximal acceptable size.
-            if (tempBitmap != null && (tempBitmap.getWidth() > desiredWidth ||
-                    tempBitmap.getHeight() > desiredHeight)) {
-                bitmap = Bitmap.createScaledBitmap(tempBitmap,
-                        desiredWidth, desiredHeight, true);
+            // 若是生成的Bitmap中宽高值任何一个超出指定的合适的宽高值，则进行裁剪。.
+            if (tempBitmap != null && (tempBitmap.getWidth() > desiredWidth || tempBitmap.getHeight() > desiredHeight)) {
+                bitmap = Bitmap.createScaledBitmap(tempBitmap, desiredWidth, desiredHeight, true);
                 tempBitmap.recycle();
             } else {
                 bitmap = tempBitmap;
             }
         }
-
+        //若是解析出来的Bitmap为空，则传递一个异常。
         if (bitmap == null) {
             return Response.error(new ParseError(response));
         } else {
@@ -190,25 +190,24 @@ public class ImageRequest extends Request<Bitmap> {
     }
 
     /**
-     * Returns the largest power-of-two divisor for use in downscaling a bitmap
-     * that will not result in the scaling past the desired dimensions.
+     *
+     * 返回一个2的最大的冥除数，用于当做图片的压缩比例，
+     * 以确保压缩出来的图片不会超出指定宽高值。
      *
      * @param actualWidth Actual width of the bitmap
      * @param actualHeight Actual height of the bitmap
      * @param desiredWidth Desired width of the bitmap
      * @param desiredHeight Desired height of the bitmap
      */
-    // Visible for testing.
-    static int findBestSampleSize(
-            int actualWidth, int actualHeight, int desiredWidth, int desiredHeight) {
+    static int findBestSampleSize(int actualWidth, int actualHeight, int desiredWidth, int desiredHeight) {
         double wr = (double) actualWidth / desiredWidth;
         double hr = (double) actualHeight / desiredHeight;
+        //比较两个值，返回最小的值
         double ratio = Math.min(wr, hr);
         float n = 1.0f;
         while ((n * 2) <= ratio) {
             n *= 2;
         }
-
         return (int) n;
     }
 
